@@ -1,189 +1,74 @@
 // Get platform specific interface object.
 let platform = chrome ? chrome : browser;
 
-let tabs = {};
-function setVol(id, vol, cb) {
-    // cb is optional: cb(success:boolean)
-    if (typeof cb !== 'function') cb = null;
+// load shared utilities (defines make, ICONS, flashRed)
+importScripts('utils.js');
 
-    function closeContext() {
-        if (tabs[id].audioContext !== undefined) {
-            tabs[id].audioContext.close();
-        }
-        if (tabs[id].mediaStream !== undefined) {
-            tabs[id].mediaStream.getAudioTracks()[0].stop();
-        }
-        tabs[id] = {};
-    }
+// We handle audio capture/AudioContext inside an offscreen document (offscreen.html)
+// because service workers don't provide a DOM or AudioContext.
 
-    // Setup empty object if not called previously.
-    if (tabs[id] === undefined) {
-        tabs[id] = {};
-    }
-
-    // If volume is default disable everything.
-    // if (vol == 100) {
-    //     closeContext();
-
-    //     return true;
-    // }
-
-    // If volume given map it from 0-100 to 0-1 and scale it exponentially.
-    if (vol) {
-        vol = Math.pow((vol / 100), 2);
-    }
-
-    // Initialize API.
-    if (tabs[id].audioContext === undefined) {
-        // Get audio context.
-        tabs[id].audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        // Start tab audio capture.
-        platform.tabCapture.capture({ audio: true, video: false }, function (stream) {
-            if (chrome.runtime.lastError) {
-                console.log("activeTab not triggered!!!");
-                closeContext();
-                if (cb) cb(false);
-                return;
-            }
-
-            if (stream === null) {
-                closeContext();
-                if (cb) cb(false);
-                return;
-            }
-            // Get media source.
-            tabs[id].mediaStream = stream;
-            let source = tabs[id].audioContext.createMediaStreamSource(tabs[id].mediaStream);
-            // Create gain filter.
-            tabs[id].gainFilter = tabs[id].audioContext.createGain();
-            // Connect gain filter to the source.
-            source.connect(tabs[id].gainFilter);
-            // Connect the gain filter to the output destination.
-            tabs[id].gainFilter.connect(tabs[id].audioContext.destination);
-            // Apply volume.
-            if (vol !== undefined) {
-                tabs[id].gainFilter.gain.value = vol;
-            }
-            // notify caller success
-            if (cb) cb(true);
-        });
-        // capture is async; return true to indicate request was started
-        return true;
-    }
-    // If volume is given and stream already present.
-    if (vol !== undefined && tabs[id].mediaStream !== undefined) {
-        tabs[id].gainFilter.gain.value = vol;
-    }
-
-    // immediate success
-    if (cb) cb(true);
-    return true;
-}
-
-platform.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-    if (request.id == -1) {
-        request.id = sender.tab.id;
-    }
-
-    return setVol(request.id, request.volume);
-});
-
-const ICONS = {
-  red:  make("assets/icons/red"),
-  blue: make("assets/icons/blue")
-};
-
-function make(base) {
-  return {
-    16:  `${base}/16.png`,
-    32:  `${base}/32.png`,
-    64:  `${base}/64.png`,
-    128: `${base}/128.png`
-  };
-}
-
-let flashInProgress = false;
-function flashRed() {
-  if (flashInProgress) return; // already flashing, exit immediately
-
-  flashInProgress = true;
-  chrome.browserAction.setIcon({ path: ICONS.red });
-
-  setTimeout(() => {
-    chrome.browserAction.setIcon({ path: ICONS.blue });
-    flashInProgress = false; // reset flag
-  }, 300);
-}
+// `make`, `ICONS`, and `flashRed` are provided by `utils.js` loaded above
 
 let portReady = false;
 
-// Replace direct connectNative with a resilient connector:
+// Native host connector (keeps existing resilient reconnect logic)
 let port = null;
 let reconnectTimeout = null;
 let backoff = 1000; // start 1s
 const maxBackoff = 60000; // max 60s
 
 function scheduleReconnect() {
-	chrome.browserAction.setIcon({ path: ICONS["red"] });
-    
-    // don't schedule multiple concurrent timers
-	if (reconnectTimeout) return;
-	const delay = backoff;
-	console.log('Scheduling native host reconnect in', delay, 'ms');
-	reconnectTimeout = setTimeout(() => {
-		reconnectTimeout = null;
-		backoff = Math.min(backoff * 2, maxBackoff);
-		connectToNativeHost();
-	}, delay);
+    chrome.action.setIcon({ path: ICONS["red"] });
+    if (reconnectTimeout) return;
+    const delay = backoff;
+    console.log('Scheduling native host reconnect in', delay, 'ms');
+    reconnectTimeout = setTimeout(() => {
+        reconnectTimeout = null;
+        backoff = Math.min(backoff * 2, maxBackoff);
+        connectToNativeHost();
+    }, delay);
 }
 
 function connectToNativeHost() {
-	// already connected
-	if (port) return;
+    if (port) return;
+    try {
+        port = platform.runtime.connectNative('com.volume.control');
+        console.log("connect done");
+    } catch (e) {
+        console.log("connectNative failed:", e);
+        scheduleReconnect();
+        return;
+    }
 
-	try {
-		port = platform.runtime.connectNative('com.volume.control');
-		console.log("connect done");
-	} catch (e) {
-		// connectNative can throw if the host is not registered
-		console.log("connectNative failed:", e);
-		scheduleReconnect();
-		return;
-	}
+    chrome.action.setIcon({ path: ICONS["blue"] });
+    backoff = 1000;
 
-    chrome.browserAction.setIcon({ path: ICONS["blue"] });
+    port.onMessage.addListener((req) => {
+        if (platform.runtime.lastError) {
+            console.log(platform.runtime.lastError.message);
+        }
+        handleMessage(req);
+    });
 
-	// reset backoff on successful connect
-	backoff = 1000;
+    port.onDisconnect.addListener(() => {
+        if (platform.runtime.lastError) {
+            console.log(platform.runtime.lastError.message);
+        }
+        console.log('Native host disconnected');
+        portReady = false;
+        port = null;
+        scheduleReconnect();
+    });
 
-	port.onMessage.addListener((req) => {
-		if (platform.runtime.lastError) {
-			console.log(platform.runtime.lastError.message);
-		}
-		handleMessage(req);
-	});
-
-	port.onDisconnect.addListener(() => {
-		if (platform.runtime.lastError) {
-			console.log(platform.runtime.lastError.message);
-		}
-		console.log('Native host disconnected');
-		portReady = false;
-		port = null;
-		scheduleReconnect();
-	});
-
-	// attempt initial ping; wrap in try/catch in case postMessage fails immediately
-	try {
-		port.postMessage({ message: 'ping' });
-		console.log("ping send done");
-	} catch (e) {
-		console.log("ping failed:", e);
-		// If ping fails, disconnect/cleanup and schedule reconnect
-		try { port.disconnect && port.disconnect(); } catch (_) {}
-		port = null;
-		scheduleReconnect();
-	}
+    try {
+        port.postMessage({ message: 'ping' });
+        console.log("ping send done");
+    } catch (e) {
+        console.log("ping failed:", e);
+        try { port.disconnect && port.disconnect(); } catch (_) { }
+        port = null;
+        scheduleReconnect();
+    }
 }
 
 // start the connection attempts at extension startup
@@ -191,15 +76,15 @@ connectToNativeHost();
 
 // Helper: send tab list only when native host is ready
 function sendTabList() {
-	if (!port || !portReady) return;
-	platform.tabs.query({}, function (tabs) {
-		const tabList = tabs.map(tab => ({ id: tab.id, title: tab.title }));
-		try {
-			port.postMessage(tabList);
-		} catch (e) {
-			// ignore if port is closed/disconnected
-		}
-	});
+    if (!port || !portReady) return;
+    platform.tabs.query({}, function (tabs) {
+        const tabList = tabs.map(tab => ({ id: tab.id, title: tab.title }));
+        try {
+            port.postMessage(tabList);
+        } catch (e) {
+            // ignore if port is closed/disconnected
+        }
+    });
 }
 
 // Send updated tab list when a tab's URL or title changes.
@@ -209,9 +94,82 @@ platform.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 });
 
+// Ensure an offscreen document exists so we can run AudioContext/tabCapture.
+async function ensureOffscreen() {
+    const url = 'offscreen.html';
+    try {
+        const exists = await chrome.offscreen.hasDocument();
+        if (!exists) {
+            await chrome.offscreen.createDocument({ url, reasons: ['AUDIO_PLAYBACK'], justification: 'Audio processing for volume control' });
+            console.log('Created offscreen document');
+        }
+    } catch (e) {
+        console.log('Offscreen create/hasDocument failed:', e);
+    }
+}
+
+async function forwardToOffscreen(message) {
+    try {
+        await ensureOffscreen();
+    } catch (e) {
+        console.log('Failed ensuring offscreen:', e);
+    }
+
+    return new Promise((resolve) => {
+        chrome.runtime.sendMessage(message, (response) => {
+            // response may be undefined if the listener doesn't send anything
+            resolve(response);
+        });
+    });
+}
+
+function applyVolumeUpdate(tabId, volume) {
+    return new Promise((resolve) => {
+        // Obtain a media stream id for the target tab and forward to offscreen
+        getStreamIdForTab(tabId).then((streamId) => {
+            if (!streamId) {
+                console.log("Failed to obtain streamId for tab", tabId);
+                return resolve(false);
+            }
+
+            forwardToOffscreen({ type: 'setvol', streamId, tab: tabId, volume: volume }).then((res) => {
+                if (!res || !res.ok) {
+                    console.log("Failed to set volume (capture failed)");
+                    return resolve(false);
+                }
+
+                platform.tabs.get(tabId, (tab) => {
+                    try {
+                        let domain = tab.url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n]+)/im)[1];
+                        let items = {};
+                        items[domain] = volume;
+                        platform.storage.local.set(items);
+                    } catch (e) {
+                        // ignore any parsing/storage errors
+                    }
+                });
+
+                try {
+                    chrome.action.setBadgeText({ tabId: tabId, text: volume === 100 ? "" : String(volume) });
+                } catch (e) {
+                    console.log('setBadgeText failed:', e);
+                }
+
+                return resolve(true);
+            }).catch((e) => {
+                console.log('forwardToOffscreen error:', e);
+                return resolve(false);
+            });
+        }).catch((e) => {
+            console.log('Error getting stream id:', e);
+            return resolve(false);
+        });
+    });
+
+}
+
 function handleMessage(req) {
     console.log(JSON.stringify(req));
-    // Wait for native host readiness before sending tab info
     if (req.message === 'allready') {
         portReady = true;
         console.log('Native host ready — sending tab list');
@@ -221,22 +179,13 @@ function handleMessage(req) {
 
     if (req.message == 'setvol') {
         try {
-            // Use async callback so we catch capture failures that happen inside the callback.
-            setVol(req.tab, req.volume, function(ok) {
+            // native host requested a volume change for a tab
+            // Expecting: { message: 'setvol', tab: <tabId>, volume: <number> }
+            applyVolumeUpdate(req.tab, req.volume).then((ok) => {
                 if (!ok) {
-                    console.log("Failed to set volume (capture failed)");
                     flashRed();
-                    return;
+                    console.log('Native setvol failed for', req.tab);
                 }
-
-                platform.tabs.get(req.tab, (tab) => {
-                    let domain = tab.url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n]+)/im)[1];
-                    let items = {};
-                    items[domain] = req.volume;
-                    platform.storage.local.set(items);
-                });
-
-                chrome.browserAction.setBadgeText({ tabId: req.tab, text: String(req.volume) });
             });
         } catch (e) {
             flashRed();
@@ -245,3 +194,68 @@ function handleMessage(req) {
         }
     }
 }
+
+// Helper: get a tab capture media stream id for a tab (returns Promise<string|undefined>)
+function getStreamIdForTab(tabId) {
+    return new Promise((resolve) => {
+        const key = `streamId_${tabId}`;
+        try {
+            chrome.storage.session.get([key], (items) => {
+                if (chrome.runtime.lastError) {
+                    console.log('storage.session.get failed:', chrome.runtime.lastError.message);
+                }
+
+                const cached = items && items[key];
+                if (cached) {
+                    return resolve(cached);
+                }
+
+                // Not cached: obtain a new stream id and store it in session storage
+                chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (streamId) => {
+                    if (chrome.runtime.lastError) {
+                        console.log('getMediaStreamId failed:', chrome.runtime.lastError.message);
+                        return resolve(undefined);
+                    }
+
+                    try {
+                        chrome.storage.session.set({ [key]: streamId }, () => {
+                            if (chrome.runtime.lastError) {
+                                console.log('storage.session.set failed:', chrome.runtime.lastError.message);
+                            }
+                        });
+                    } catch (e) {
+                        console.log('storage.session.set exception:', e);
+                    } finally {
+                        resolve(streamId);
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.log('getStreamIdForTab error:', e);
+            resolve(undefined);
+        }
+    });
+}
+
+// Listen for messages from popup/content scripts and forward to offscreen for audio handling.
+platform.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+    if (request.id == -1 && sender && sender.tab) {
+        request.id = sender.tab.id;
+    }
+    // If this message carries a `volume` payload, treat as a set-volume request.
+    if (typeof request.volume !== 'undefined') {
+        try {
+            // applyVolumeUpdate will call sendResponse(true|false) when provided
+            applyVolumeUpdate(request.id, request.volume, sendResponse).catch((e) => {
+                console.log('applyVolumeUpdate error:', e);
+                try { sendResponse(false); } catch (_) { }
+            });
+        } catch (e) {
+            try { sendResponse(false); } catch (_) { }
+        }
+        return true; // indicate we'll respond asynchronously
+    }
+
+    return false;
+});

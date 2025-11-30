@@ -18,28 +18,12 @@ document.addEventListener('DOMContentLoaded', function() {
         rangeInput.addEventListener('input', function() {
             let value = parseInt(this.value, 10);
             updateVolume(value);
-
-            // Store volume level.
-            let items = {};
-            items[domain] = value;
-            platform.storage.local.set(items);
-
-            // Update badge.
-            const text = String(value);
-            chrome.browserAction.setBadgeText({ text, tabId: tabs[0].id });
         });
 
         // Button click event.
         document.getElementById('resetBtn').addEventListener('click', function() {
             // Set volume to default.
             updateVolume(100);
-
-            // Hide the badge.
-            chrome.browserAction.setBadgeText({ text: "", tabId: tabs[0].id });
-            // Store default volume level in storage.
-            let items = {};
-            items[domain] = 100;
-            platform.storage.local.set(items);
 
             // Exit the window.
             window.close();

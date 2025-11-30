@@ -1,0 +1,38 @@
+// Utilities shared by background scripts
+function make(base) {
+    return {
+        16: `${base}/16.png`,
+        32: `${base}/32.png`,
+        64: `${base}/64.png`,
+        128: `${base}/128.png`
+    };
+}
+
+const ICONS = {
+    red: make("assets/icons/red"),
+    blue: make("assets/icons/blue")
+};
+
+let flashInProgress = false;
+function flashRed() {
+    if (flashInProgress) return;
+    flashInProgress = true;
+    try {
+        chrome.action.setIcon({ path: ICONS.red });
+    } catch (e) {
+        console.log('flashRed setIcon failed:', e);
+    }
+    setTimeout(() => {
+        try {
+            chrome.action.setIcon({ path: ICONS.blue });
+        } catch (e) {
+            console.log('flashRed restore icon failed:', e);
+        }
+        flashInProgress = false;
+    }, 300);
+}
+
+// expose to global scope (no module system in service worker importScripts)
+this.make = make;
+this.ICONS = ICONS;
+this.flashRed = flashRed;

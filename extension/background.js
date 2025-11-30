@@ -1,13 +1,10 @@
-// Get platform specific interface object.
 let platform = chrome ? chrome : browser;
 
-// load shared utilities (defines make, ICONS, flashRed)
-importScripts('utils.js');
+
+import { make, ICONS, flashRed } from './utils.js';
 
 // We handle audio capture/AudioContext inside an offscreen document (offscreen.html)
 // because service workers don't provide a DOM or AudioContext.
-
-// `make`, `ICONS`, and `flashRed` are provided by `utils.js` loaded above
 
 let portReady = false;
 
@@ -246,8 +243,10 @@ platform.runtime.onMessage.addListener(function (request, sender, sendResponse) 
     // If this message carries a `volume` payload, treat as a set-volume request.
     if (typeof request.volume !== 'undefined') {
         try {
-            // applyVolumeUpdate will call sendResponse(true|false) when provided
-            applyVolumeUpdate(request.id, request.volume, sendResponse).catch((e) => {
+            // Apply the volume update and reply to the sender with success/failure.
+            applyVolumeUpdate(request.id, request.volume).then((ok) => {
+                try { sendResponse(!!ok); } catch (_) { }
+            }).catch((e) => {
                 console.log('applyVolumeUpdate error:', e);
                 try { sendResponse(false); } catch (_) { }
             });

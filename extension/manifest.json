@@ -1,10 +1,10 @@
 {
     "manifest_version": 3,
-    "author": "Sam @yungsamd17",
-    "name": "Volume Control",
+    "author": "MrMati",
+    "name": "Mixy Volume Control",
     "version": "1.1.1",
-    "description": "Adjust volume up to 200%",
-    "homepage_url": "https://github.com/yungsamd17/Volume-Control",
+    "description": "Control volume of your tabs with Mixy",
+    "homepage_url": "https://github.com/MixyLabs/VolumeControl",
 
     "icons": {
         "16": "assets/icons/blue/16.png",
@@ -18,7 +18,6 @@
         "tabCapture",
         "nativeMessaging",
         "tabs",
-        "alarms",
         "scripting",
         "offscreen"
     ],
@@ -28,11 +27,12 @@
     ],
 
     "background": {
-        "service_worker": "background.js"
+        "service_worker": "background.js",
+        "type": "module"
     },
 
     "action": {
-        "default_title": "Volume Control",
+        "default_title": "Mixy Volume Control",
         "default_popup": "popup.html"
     },
 
@@ -43,7 +43,7 @@
 
     "web_accessible_resources": [
         {
-            "resources": ["assets/*", "assets/icons/*", "discord_volume.txt"],
+            "resources": ["assets/*", "assets/icons/*"],
             "matches": ["<all_urls>"]
         }
     ],

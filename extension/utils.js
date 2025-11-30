@@ -32,7 +32,5 @@ function flashRed() {
     }, 300);
 }
 
-// expose to global scope (no module system in service worker importScripts)
-this.make = make;
-this.ICONS = ICONS;
-this.flashRed = flashRed;
+// Export as ES module for service worker/module usage
+export { make, ICONS, flashRed };

@@ -97,7 +97,7 @@ async function ensureOffscreen() {
     try {
         const exists = await chrome.offscreen.hasDocument();
         if (!exists) {
-            await chrome.offscreen.createDocument({ url, reasons: ['AUDIO_PLAYBACK'], justification: 'Audio processing for volume control' });
+            await chrome.offscreen.createDocument({ url, reasons: ['AUDIO_PLAYBACK', 'USER_MEDIA'], justification: 'Audio processing for volume control' });
             console.log('Created offscreen document');
         }
     } catch (e) {
@@ -258,3 +258,40 @@ platform.runtime.onMessage.addListener(function (request, sender, sendResponse) 
 
     return false;
 });
+
+// Simple MV3 service worker snippet to query http://localhost:8080/
+
+async function queryLocal(timeoutMs = 5000) {
+    try {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+
+        const res = await fetch('http://localhost:8080/', { signal: controller.signal, cache: 'no-store' });
+        clearTimeout(id);
+
+        if (!res.ok) {
+            console.log('localhost fetch failed:', res.status, res.statusText);
+            return { ok: false, status: res.status, statusText: res.statusText };
+        }
+
+        const contentType = res.headers.get('content-type') || '';
+        const body = contentType.includes('application/json') ? await res.json() : await res.text();
+
+        console.log('localhost response:', body);
+
+        // Broadcast response to all extension clients (popup/content scripts)
+        self.clients.matchAll().then(clients => {
+            for (const client of clients) {
+                client.postMessage({ type: 'local-response', ok: true, body });
+            }
+        });
+
+        return { ok: true, body };
+    } catch (err) {
+        console.log('localhost fetch error:', err);
+        return { ok: false, error: String(err) };
+    }
+}
+
+// Immediate query at startup
+queryLocal();

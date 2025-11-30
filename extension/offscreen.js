@@ -97,8 +97,3 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return true; // async
 });
-
-
-window.addEventListener('unload', () => {
-  Object.keys(contextByStreamId).forEach(k => closeContext(k));
-});

@@ -4,7 +4,7 @@
     "name": "Mixy Volume Control",
     "version": "1.1.1",
     "description": "Control volume of your tabs with Mixy",
-    "homepage_url": "https://github.com/MixyLabs/VolumeControl",
+    "homepage_url": "https://github.com/MixyLabs/meej-web-ext",
 
     "icons": {
         "16": "assets/icons/blue/16.png",
@@ -20,10 +20,6 @@
         "tabs",
         "scripting",
         "offscreen"
-    ],
-
-    "host_permissions": [
-        "<all_urls>"
     ],
 
     "background": {
@@ -50,5 +46,7 @@
 
     "content_security_policy": {
         "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' https://cdnjs.cloudflare.com"
-    }
+    },
+
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw9Z1i3O7nqxz+DZlQco0AOyACwCAYlzCosd6sLlI+WMaS7AOhLa2PmWjQk/1MSfgCm0xAGbL/BX0aodho1VBzHy3ZntBcGEr/43f9XTNkXjxz0Ml3fSi8r2PyAvQh4qi26Z8dELx4Mhq3sy0PfNmxtLOYplYsEcMI6+FQnPD1q1sfEVUzxrhSkT6BsJJkr6ZDqntk8qePYXvtYV3nvqWU94Rx5sHGYyt4SADGh6DLbnEHZh3ICdONlH2VXJvz+8vKBOtkqgEP57N1n/b0bp7UeFZDjXMAkv5ezhUwFut43X8Obyr+kSehDl6bDHSziDkKlQL+sZCmByjgYJqM9QIyQIDAQAB"
 }

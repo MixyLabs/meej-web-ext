@@ -1,7 +1,7 @@
 let platform = chrome ? chrome : browser;
 
 
-import { make, ICONS, flashRed } from './utils.js';
+import { ICONS, flashRed } from './utils.js';
 
 // We handle audio capture/AudioContext inside an offscreen document (offscreen.html)
 // because service workers don't provide a DOM or AudioContext.
@@ -12,7 +12,7 @@ let portReady = false;
 let port = null;
 let reconnectTimeout = null;
 let backoff = 1000; // start 1s
-const maxBackoff = 60000; // max 60s
+const maxBackoff = 20000; // max 20s
 
 function scheduleReconnect() {
     chrome.action.setIcon({ path: ICONS["red"] });
@@ -72,6 +72,7 @@ function connectToNativeHost() {
 connectToNativeHost();
 
 // Helper: send tab list only when native host is ready
+/* DISABLED
 function sendTabList() {
     if (!port || !portReady) return;
     platform.tabs.query({}, function (tabs) {
@@ -83,13 +84,40 @@ function sendTabList() {
         }
     });
 }
+*/
 
 // Send updated tab list when a tab's URL or title changes.
+/* DISABLED
 platform.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url || changeInfo.title) {
         sendTabList();
     }
 });
+*/
+
+// Send updated tab list when a tab is closed/removed.
+/* DISABLED
+platform.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    try {
+        console.log('Tab removed:', tabId, removeInfo);
+        // Clean up any cached tab stream id from session storage to avoid stale entries
+        try {
+            const key = `streamId_${tabId}`;
+            platform.storage && platform.storage.session && platform.storage.session.remove && platform.storage.session.remove([key], () => {
+                if (platform.runtime && platform.runtime.lastError) {
+                    console.log('storage.session.remove failed:', platform.runtime.lastError.message);
+                }
+            });
+        } catch (e) {
+            console.log('storage.session.remove exception:', e);
+        }
+        sendTabList();
+    } catch (e) {
+        console.log('onRemoved handler error:', e);
+    }
+});
+*/
+
 
 // Ensure an offscreen document exists so we can run AudioContext/tabCapture.
 async function ensureOffscreen() {
@@ -120,18 +148,25 @@ async function forwardToOffscreen(message) {
     });
 }
 
+let applyVolumeUpdateLocked = false;
+
 function applyVolumeUpdate(tabId, volume) {
+    if (applyVolumeUpdateLocked) return Promise.resolve(true);  // block re-entry
+    applyVolumeUpdateLocked = true;
+
     return new Promise((resolve) => {
         // Obtain a media stream id for the target tab and forward to offscreen
         getStreamIdForTab(tabId).then((streamId) => {
             if (!streamId) {
                 console.log("Failed to obtain streamId for tab", tabId);
+                applyVolumeUpdateLocked = false;
                 return resolve(false);
             }
 
             forwardToOffscreen({ type: 'setvol', streamId, tab: tabId, volume: volume }).then((res) => {
                 if (!res || !res.ok) {
                     console.log("Failed to set volume (capture failed)");
+                    applyVolumeUpdateLocked = false;
                     return resolve(false);
                 }
 
@@ -152,13 +187,16 @@ function applyVolumeUpdate(tabId, volume) {
                     console.log('setBadgeText failed:', e);
                 }
 
+                applyVolumeUpdateLocked = false;
                 return resolve(true);
             }).catch((e) => {
                 console.log('forwardToOffscreen error:', e);
+                applyVolumeUpdateLocked = false;
                 return resolve(false);
             });
         }).catch((e) => {
             console.log('Error getting stream id:', e);
+            applyVolumeUpdateLocked = false;
             return resolve(false);
         });
     });
@@ -166,23 +204,46 @@ function applyVolumeUpdate(tabId, volume) {
 }
 
 function handleMessage(req) {
-    console.log(JSON.stringify(req));
-    if (req.message === 'allready') {
+    //console.log(JSON.stringify(req));
+    if (req.type === 'allready') {
         portReady = true;
-        console.log('Native host ready — sending tab list');
+        console.log('Native host ready — NOT sending tab list');
         sendTabList();
         return;
     }
 
-    if (req.message == 'setvol') {
+    if (req.type == 'setvol') {
         try {
-            // native host requested a volume change for a tab
-            // Expecting: { message: 'setvol', tab: <tabId>, volume: <number> }
-            applyVolumeUpdate(req.tab, req.volume).then((ok) => {
-                if (!ok) {
-                    flashRed();
-                    console.log('Native setvol failed for', req.tab);
+            // native host requested a volume change for tabs by title filters
+            // Expecting: { type: 'setvol', tabTargets: [<string>], volume: <number> }
+
+            platform.tabs.query({}, function (tabs) {
+                const filters = Array.isArray(req.tabTargets) ? req.tabTargets.map(s => String(s || '').toLowerCase()).filter(Boolean) : [];
+
+                if (filters.length === 0) {
+                    return;
                 }
+
+                const matchingTabs = tabs.filter(tab => {
+                    const title = String(tab.title || '').toLowerCase();
+                    return filters.some(f => title.includes(f));
+                });
+
+                if (matchingTabs.length === 0) {
+                    return;
+                }
+
+                matchingTabs.forEach(tab => {
+                    applyVolumeUpdate(tab.id, req.volume).then((ok) => {
+                        if (!ok) {
+                            flashRed();
+                            console.log('Native setvol failed for tab id', tab.id);
+                        }
+                    }).catch((e) => {
+                        flashRed();
+                        console.log('applyVolumeUpdate exception for tab', tab.id, e);
+                    });
+                });
             });
         } catch (e) {
             flashRed();
@@ -259,8 +320,7 @@ platform.runtime.onMessage.addListener(function (request, sender, sendResponse) 
     return false;
 });
 
-// Simple MV3 service worker snippet to query http://localhost:8080/
-
+/*  Direct WS communication PoC
 async function queryLocal(timeoutMs = 5000) {
     try {
         const controller = new AbortController();
@@ -294,4 +354,4 @@ async function queryLocal(timeoutMs = 5000) {
 }
 
 // Immediate query at startup
-queryLocal();
+queryLocal();*/

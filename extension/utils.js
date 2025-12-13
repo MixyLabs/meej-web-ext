@@ -17,6 +17,7 @@ let flashInProgress = false;
 function flashRed() {
     if (flashInProgress) return;
     flashInProgress = true;
+
     try {
         chrome.action.setIcon({ path: ICONS.red });
     } catch (e) {
@@ -28,9 +29,12 @@ function flashRed() {
         } catch (e) {
             console.log('flashRed restore icon failed:', e);
         }
-        flashInProgress = false;
+
+        setTimeout(() => {
+            flashInProgress = false;
+        }, 300);
     }, 300);
 }
 
 // Export as ES module for service worker/module usage
-export { make, ICONS, flashRed };
+export { ICONS, flashRed };

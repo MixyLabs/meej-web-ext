@@ -20,5 +20,5 @@ mv extension/manifest.json.tmp extension/manifest.json
 
 # Zip extension
 cd extension
-zip -r ../extension.zip .
+zip -r ../meej-web-ext.zip .
 #cd ..

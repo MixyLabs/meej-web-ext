@@ -30,7 +30,7 @@ function connectToNativeHost() {
     if (port) return;
     try {
         port = platform.runtime.connectNative('com.volume.control');
-        console.log("connect done");
+        //console.log("connect done");
     } catch (e) {
         console.log("connectNative failed:", e);
         scheduleReconnect();
@@ -59,7 +59,7 @@ function connectToNativeHost() {
 
     try {
         port.postMessage({ message: 'ping' });
-        console.log("ping send done");
+        //console.log("ping send done");
     } catch (e) {
         console.log("ping failed:", e);
         try { port.disconnect && port.disconnect(); } catch (_) { }
@@ -72,8 +72,9 @@ function connectToNativeHost() {
 connectToNativeHost();
 
 // Helper: send tab list only when native host is ready
-/* DISABLED
+
 function sendTabList() {
+    /* DISABLED
     if (!port || !portReady) return;
     platform.tabs.query({}, function (tabs) {
         const tabList = tabs.map(tab => ({ id: tab.id, title: tab.title }));
@@ -83,8 +84,9 @@ function sendTabList() {
             // ignore if port is closed/disconnected
         }
     });
+    */
 }
-*/
+
 
 // Send updated tab list when a tab's URL or title changes.
 /* DISABLED

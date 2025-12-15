@@ -24,8 +24,9 @@ jobs:
           chmod +x scripts/package.sh
           ./scripts/package.sh
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v6
+      - name: Upload package to release
+        uses: svenstaro/upload-release-action@v2
         with:
-          name: chromium-extension
-          path: extension.zip
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: meej-web-ext.zip
+          tag: ${{ github.ref }}

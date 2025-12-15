@@ -1,15 +1,15 @@
 # Meej Web Extension
 
-Control volume of separate tabs in your browser with Mixy. 
+Control volume of individual tabs in your browser with Mixy. 
 
 It is experimental, but seems to work fine and without known bugs.
 
-The extension uses a browser permission that allows capturing audio from tabs (tabCapture). There is no viable alternative to this approach, which is why Firefox is not supported, as it does not implement it.
+The extension uses a browser permission that allows capturing audio from tabs (tabCapture). There is no viable alternative to this approach, which is why Firefox is not supported, as it does not implement it. It can capture only these tabs for which it was activated by clicking its icon when the tab was focused.
 
-It can capture only these tabs for which it was activated by clicking its icon when the tab was focused.
+Only major annoyance is that captured tabs cannot achieve fullscreen, my mitigation is additionally making the browser fullscreen (F11).
 
 ## Install 
-Simply drop the extension.zip from [Releases](https://github.com/MixyLabs/meej/releases/latest) into browser's extensions page.
+Simply drop the meej-web-ext.zip from [Releases](https://github.com/MixyLabs/meej/releases/latest) into browser's extensions page.
 
 `Load unpacked` with extension directory works fine too.
 
